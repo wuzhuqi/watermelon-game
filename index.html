@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#CBD5D2">
+  <meta name="color-scheme" content="light">
+  <meta name="format-detection" content="telephone=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="大物华">
+  <title>合成大物华 · 跑路了</title>
+  <link rel="stylesheet" href="css/style.css?v=1.4.0">
+</head>
+<body>
+  <div class="safe-probe safe-probe--top" id="safeTopProbe" aria-hidden="true"></div>
+  <div class="safe-probe safe-probe--bottom" id="safeBottomProbe" aria-hidden="true"></div>
+
+  <div class="app" id="app">
+    <main class="game-shell" id="gameShell" aria-label="合成大物华小游戏">
+      <!-- 背景：直接引用原图 bj.jpg；水果图片仍只由 Canvas 绘制 -->
+      <div class="backdrop" aria-hidden="true">
+        <img class="backdrop__image" src="img/bj.jpg" alt="">
+        <div class="backdrop__wash"></div>
+      </div>
+
+      <!-- 游戏画布：水果、警戒线、落点、粒子全部在 Canvas 2D 中绘制 -->
+      <canvas id="gameCanvas" role="img"
+              aria-label="游戏区域：拖动屏幕选择落点，松手让水果落下"></canvas>
+
+      <!-- 顶部 HUD -->
+      <header class="hud" id="hud">
+        <section class="score-card" aria-label="分数">
+          <span class="eyebrow">SCORE</span>
+          <strong class="score-value" id="scoreValue">0</strong>
+          <span class="best-value">BEST <b id="bestValue">0</b></span>
+        </section>
+
+        <section class="next-card" aria-label="下一个水果">
+          <span class="eyebrow">NEXT</span>
+          <canvas class="next-canvas" id="nextCanvas" width="84" height="84"
+                  aria-label="下一个水果"></canvas>
+        </section>
+
+        <div class="hud-actions">
+          <button class="icon-btn" id="achievementBtn" type="button"
+                  aria-label="查看成就" aria-haspopup="dialog" aria-controls="achievementPanel">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M7 4h10v4.1a4.9 4.9 0 0 1-4.1 4.83V16h2.35a1 1 0 0 1 1 1v1.5H7.75V17a1 1 0 0 1 1-1H11v-3.07A4.9 4.9 0 0 1 7 8.1V4Zm-2 1.5H3.5V7A3.5 3.5 0 0 0 7 10.5v-2A1.5 1.5 0 0 1 5.5 7V5.5H5Zm14 0h-1.5V7a1.5 1.5 0 0 1-1.5 1.5v2A3.5 3.5 0 0 0 20.5 7V5.5H19Z"/>
+            </svg>
+            <span class="icon-btn__badge" id="achievementBadge" aria-hidden="true">0</span>
+          </button>
+
+          <button class="icon-btn" id="soundBtn" type="button" aria-label="关闭音效" aria-pressed="true">
+            <svg class="sound-on" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M4 9.5v5h3.2L12 18V6L7.2 9.5H4Zm10.5-.85a4.6 4.6 0 0 1 0 6.7l1.35 1.35a6.45 6.45 0 0 0 0-9.4L14.5 8.65Zm2.8-2.8a8.55 8.55 0 0 1 0 12.3l1.35 1.35a10.4 10.4 0 0 0 0-15L17.3 5.85Z"/>
+            </svg>
+            <svg class="sound-off" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M4 9.5v5h3.2L12 18V6L7.2 9.5H4Zm10.6.2L16.9 12l-2.3 2.3 1.2 1.2 2.3-2.3 2.3 2.3 1.2-1.2-2.3-2.3 2.3-2.3-1.2-1.2-2.3 2.3-2.3-2.3-1.2 1.2Z"/>
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- 07 回溯状态提示：场上有 07 且本局未发动过时显示 -->
+      <div class="rewind-chip" id="rewindChip" hidden aria-live="polite">
+        <span class="rewind-chip__icon" aria-hidden="true">↺</span>
+        <span>07 回溯就绪</span>
+      </div>
+
+      <!-- 09 在场时的下一颗自选入口 -->
+      <button class="nine-pick-btn" id="ninePickBtn" type="button" hidden
+              aria-haspopup="dialog" aria-controls="sendPicker">
+        <span class="nine-pick-btn__badge" aria-hidden="true">09</span>
+        <span>自选下一颗</span>
+      </button>
+
+      <!-- 首次操作提示 -->
+      <div class="gesture-hint" id="gestureHint" aria-hidden="true">
+        <span class="gesture-hint__hand">☝</span>
+        <span>拖动瞄准 · 松手落下</span>
+      </div>
+
+      <!-- 06 / 08 生成字幕 -->
+      <div class="subtitle-layer" id="subtitleLayer" aria-live="polite" aria-hidden="true">
+        <span id="subtitleText"></span>
+      </div>
+
+      <!-- 神秘暗号解锁后的自由放置状态条 -->
+      <div class="cheat-bar" id="cheatBar" hidden>
+        <span class="cheat-bar__text">自由放置 <b id="cheatKey">01</b> · 点击场上任意位置</span>
+        <button class="cheat-bar__exit" id="exitCheatBtn" type="button">退出</button>
+      </div>
+
+      <!-- 结束层：顺序严格为 冻结物理 -> 换 00 贴图 -> 跑路了 -> 重开 -> 成就 -->
+      <section class="end-overlay" id="endOverlay" aria-hidden="true" aria-labelledby="endTitle">
+        <div class="end-content">
+          <span class="end-kicker">GAME OVER</span>
+          <h1 class="end-title" id="endTitle">跑路了</h1>
+          <p class="end-score">
+            本局 <strong id="finalScore">0</strong> 分
+            <span class="dot">·</span>
+            最高 <strong id="finalBest">0</strong> 分
+          </p>
+          <div class="end-actions">
+            <button class="primary-btn" id="restartBtn" type="button">再来一局</button>
+            <button class="text-btn" id="endAchievementBtn" type="button">看看成就</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 合成出 12 级时的灰屏预警，由玩家决定是否继续 -->
+      <section class="warning-overlay" id="level12Warning" aria-hidden="true" role="dialog"
+               aria-modal="true" aria-labelledby="level12WarningTitle">
+        <div class="warning-card">
+          <span class="warning-kicker">LEVEL 12 DETECTED</span>
+          <div class="warning-mark" aria-hidden="true">!</div>
+          <h2 id="level12WarningTitle">跑路预警</h2>
+          <p id="level12WarningText">12 级大物华出现了，还要继续跑吗？</p>
+          <div class="warning-actions">
+            <button class="primary-btn" id="warningContinueBtn" type="button">继续玩</button>
+            <button class="text-btn warning-quit-btn" id="warningQuitBtn" type="button">跑路了</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 09 在场时：自选 01~08 作为下一颗发送的水果 -->
+      <section class="picker-layer" id="sendPicker" aria-hidden="true" role="dialog"
+               aria-modal="true" aria-labelledby="sendPickerTitle">
+        <div class="picker-sheet" id="sendPickerSheet" tabindex="-1">
+          <div class="panel-grabber" aria-hidden="true"></div>
+          <header class="picker-head">
+            <div>
+              <span class="eyebrow">09 POWER</span>
+              <h2 id="sendPickerTitle">指定下一颗</h2>
+            </div>
+            <button class="close-btn" id="closePickerBtn" type="button" aria-label="关闭自选水果面板">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="m6.4 5 5.6 5.6L17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6 10.6 12 5 6.4 6.4 5Z"/>
+              </svg>
+            </button>
+          </header>
+          <p class="picker-copy">场上存在 09：从 01~08 中任选一项，替换当前待发送的水果。</p>
+          <div class="fruit-grid" id="fruitGrid"></div>
+          <p class="picker-note">不会消耗 09；09 离场后该入口消失。</p>
+        </div>
+      </section>
+      <section class="panel-layer" id="achievementPanel" aria-hidden="true" role="dialog"
+               aria-modal="true" aria-labelledby="achievementPanelTitle">
+        <div class="panel" id="achievementSheet" tabindex="-1">
+          <div class="panel-grabber" aria-hidden="true"></div>
+          <header class="panel-head">
+            <div>
+              <span class="eyebrow">ACHIEVEMENTS</span>
+              <h2 id="achievementPanelTitle">成就</h2>
+            </div>
+            <div class="panel-head__meta">
+              <span id="achievementCount">0 / 10</span>
+              <button class="close-btn" id="closeAchievementBtn" type="button" aria-label="关闭成就面板">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="m6.4 5 5.6 5.6L17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6 10.6 12 5 6.4 6.4 5Z"/>
+                </svg>
+              </button>
+            </div>
+          </header>
+
+          <div class="achievement-list" id="achievementList"></div>
+
+          <aside class="recipe-card" aria-label="特殊配方提示">
+            <span class="eyebrow">HIDDEN RECIPE</span>
+            <h3>皮肤是怎么没的</h3>
+            <div class="recipe-line" id="recipeLine">01 + 02 + 03 → 004</div>
+            <p>场上同时凑齐 01、02、03 各 1 个，并让它们挤成一团，就会触发特殊合成。</p>
+          </aside>
+
+          <section class="secret-box" id="secretBox" aria-label="神秘暗号">
+            <span class="eyebrow">SECRET CODE</span>
+            <h3>神秘暗号</h3>
+            <p class="secret-copy">传闻输入一句神秘暗号，就能获得所有水果（12 除外）的自由放置权。</p>
+            <div class="secret-row" id="secretRow">
+              <input class="secret-input" id="secretInput" type="text" inputmode="text"
+                     autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+                     maxlength="24" placeholder="输入神秘暗号">
+              <button class="secret-submit" id="secretSubmitBtn" type="button">解锁</button>
+            </div>
+            <p class="secret-status" id="secretStatus" aria-live="polite"></p>
+            <div class="cheat-grid" id="cheatGrid" hidden></div>
+            <p class="cheat-note" id="cheatNote" hidden>已解锁：点选水果后，点击场上任意位置自由放置。</p>
+          </section>
+
+          <p class="panel-footnote">成就保存在本机浏览器中，重开一局不会清空。</p>
+          <button class="panel-link-btn" id="copyLinkBtn" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M10.6 13.4a1 1 0 0 1 0-1.4l2.3-2.3a3.5 3.5 0 0 1 4.95 4.95l-1.6 1.6a1 1 0 0 1-1.4-1.4l1.6-1.6a1.5 1.5 0 0 0-2.12-2.12l-2.3 2.3a1 1 0 0 1-1.4 0Zm2.8-2.8a1 1 0 0 1 0 1.4l-2.3 2.3a3.5 3.5 0 0 1-4.95-4.95l1.6-1.6a1 1 0 0 1 1.4 1.4l-1.6 1.6a1.5 1.5 0 0 0 2.12 2.12l2.3-2.3a1 1 0 0 1 1.4 0Z"/>
+            </svg>
+            复制游戏链接
+          </button>
+          <p class="panel-link-status" id="copyLinkStatus" aria-live="polite"></p>
+        </div>
+      </section>
+
+      <!-- 成就 Toast -->
+      <div class="toast-layer" id="toastLayer" aria-live="polite" aria-atomic="false"></div>
+
+      <!-- 07 回溯发动横幅 -->
+      <div class="rewind-banner" id="rewindBanner" aria-hidden="true">
+        <span class="rewind-banner__kicker">REWIND</span>
+        <strong class="rewind-banner__title">回溯发动</strong>
+        <span class="rewind-banner__detail" id="rewindDetail">清除 12 个水果，继续游戏</span>
+      </div>
+
+      <!-- 启动 / 素材加载层 -->
+      <section class="boot-overlay" id="bootOverlay" aria-live="polite">
+        <div class="boot-inner">
+          <span class="boot-kicker">MERGE DAWUHUA</span>
+          <div class="boot-logo">合成大物华</div>
+          <p class="boot-status" id="bootStatus">正在准备水果…</p>
+          <div class="boot-dots" aria-hidden="true"><i></i><i></i><i></i></div>
+        </div>
+      </section>
+
+      <!-- 致命错误提示（例如 Matter.js 没有加载成功） -->
+      <section class="fatal-overlay" id="fatalOverlay" aria-hidden="true">
+        <div class="fatal-card">
+          <h2>游戏没能启动</h2>
+          <p id="fatalMessage">请检查 vendor/matter.min.js 是否存在。</p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!--
+    Matter.js 固定使用与 CDN 同版本的本地文件，双击/断网都能立即启动。
+    CDN 地址仅作为版本参考：
+    https://unpkg.com/matter-js@0.20.0/build/matter.min.js
+  -->
+  <script src="vendor/matter.min.js?v=1.4.0"></script>
+  <script src="js/config.js?v=1.4.0"></script>
+  <script src="js/game.js?v=1.4.0"></script>
+  <noscript>这个小游戏需要开启 JavaScript 才能运行。</noscript>
+</body>
+</html>
